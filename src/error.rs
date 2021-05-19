@@ -1,0 +1,1 @@
+pub type GenError = Box<dyn std::error::Error>;
