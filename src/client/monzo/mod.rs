@@ -1,2 +1,2 @@
 mod mozno_context;
-mod monzo_client;
+pub mod monzo_client;
