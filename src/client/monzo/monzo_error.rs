@@ -1,0 +1,1 @@
+pub type MonzoError = Box<dyn std::error::Error>;
