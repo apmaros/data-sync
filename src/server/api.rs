@@ -1,9 +1,14 @@
-use actix_web::{get, Responder, HttpResponse, web, HttpRequest};
+use actix_web::{get, Responder, HttpResponse, web};
 use serde::{ Serialize, Deserialize};
-use crate::client::monzo::monzo_client::MONZO_CLIENT;
+use crate::server::server::ServerContext;
+use actix_session::Session;
 
 #[get("/")]
-pub async fn index() -> impl Responder {
+pub async fn index(session: Session) -> impl Responder {
+    match session.get::<String>("monzotoken").unwrap() {
+        Some(r) => info!("token={}", r),
+        None => info!("Token is not set") }
+
     HttpResponse::Ok().body("data-sync is running")
 }
 
@@ -24,11 +29,30 @@ pub struct AuthParam {
     code: String
 }
 
-#[get("/auth")]
-pub async fn auth(auth: web::Query<AuthParam>) -> impl Responder {
-    match MONZO_CLIENT.get_token(auth.code.to_string()) {
-        Ok(_) => println!("Good job"),
-        Err(err) => println!("uups {}", err)
+#[get("login-monzo")]
+pub fn login_monzo(data: web::Data<ServerContext>) -> HttpResponse {
+    let (url, _) = &data.bank_client.get_auth_url();
+    info!("Redirecting user to {}", url);
+
+    HttpResponse::PermanentRedirect().header("Location", url.as_str()).finish()
+}
+
+#[get("/home")]
+pub async fn auth(
+    auth: web::Query<AuthParam>,
+    data: web::Data<ServerContext>,
+    session: Session
+) -> impl Responder {
+    let client = &data.bank_client;
+    let code = auth.code.to_string();
+
+    match client.get_token(code) {
+        Ok(token) => {
+            info!("user successfully authenticated");
+            // todo set error handling
+            session.set("monzotoken", token).unwrap();
+        },
+        Err(err) => println!("failed to get access token {}", err)
     }
     web::Json(
         Healthz{status: "ok".to_string()}

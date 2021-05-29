@@ -1,7 +1,6 @@
 extern crate log;
 use crate::error::GenError;
 use std::process::exit;
-use env_logger;
 use log::{error};
 use std::env;
 

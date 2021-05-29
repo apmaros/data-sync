@@ -1,44 +1,44 @@
 #[macro_use]
-extern crate lazy_static;
+extern crate log;
+extern crate redis;
 
 mod client;
 mod util;
 mod error;
 mod server;
 
-extern crate log;
-
 use env_logger;
-use log::{info, error};
 use crate::client::monzo::monzo_client::MonzoClient;
-use crate::client::monzo::monzo_client::MONZO_CLIENT;
 
 use crate::server::server::{ServerContext, start_server};
-use std::process::exit;
-use std::sync::Arc;
+use crate::util::exit_with_error;
+use crate::error::GenError;
 
 #[actix_web::main]
 async fn main() {
-    info!("auth_url={}", MONZO_CLIENT.get_auth_url().0);
-    let a = MONZO_CLIENT.get_auth_url().0;
     env_logger::init();
-    let c = MonzoClient::new().expect("Boo");
-    let rc = Arc::new(c);
     info!("Starting Data Sync App");
-    let server_config = ServerContext {
-        host: "127.0.0.1".to_string(),
-        port: 8080.to_string(),
-        bank_client: rc
+    let monzo_client = match MonzoClient::new() {
+        Ok(c) => c,
+        Err(err) => exit_with_error(err)
     };
 
-    match start_server(&server_config).await {
+    let rclient = redis::Client::open("redis://127.0.0.1/").unwrap();
+
+    let server_context = ServerContext {
+        host: "127.0.0.1".to_string(),
+        port: 8050.to_string(),
+        bank_client: monzo_client,
+        redis_client: rclient
+    };
+
+    match start_server(server_context.clone()).await {
         Ok(()) => info!("Server started on http://{}:{}",
-                        server_config.host,
-                        server_config.port
+                        server_context.host,
+                        server_context.port
         ),
         Err(err) => {
-            error!("failed to start server due to {}", err);
-            exit(1);
+            exit_with_error(GenError::from(err));
         }
     }
 }

@@ -1,36 +1,31 @@
 use actix_web::{
-    get,
-    post,
-    web,
     App,
-    HttpResponse,
-    HttpServer,
-    Responder,
+    HttpServer
 };
-use actix_web::dev::Server as ActixServer;
+use actix_session::{
+    CookieSession
+};
 use crate::server::api::*;
 use crate::client::monzo::monzo_client::MonzoClient;
-use std::sync::Arc;
+use redis::Client as RedisClient;
 
+#[derive(Clone, Debug)]
 pub struct ServerContext {
-    pub(crate) host: String,
-    pub(crate) port: String,
-    pub(crate) bank_client: Arc<MonzoClient>
+    pub host: String,
+    pub port: String,
+    pub bank_client: MonzoClient,
+    pub redis_client: RedisClient
 }
 
-struct AppState {
-    pub(crate) mozno_client: Arc<MonzoClient>
-}
-
-pub async fn start_server(context: &ServerContext) -> std::io::Result<()> {
-    let mozno_client = context.bank_client.clone();
-    HttpServer::new(move || {
+pub async fn start_server(context: ServerContext) -> std::io::Result<()> {
+    let url = format!("{}:{}", context.host, context.port);
+    HttpServer::new( move || {
         App::new()
-            .data(AppState { mozno_client })
+            .data(context.clone())
+            .wrap(CookieSession::signed(&[0; 32]).secure(false))
             .service(index)
             .service(healthz)
             .service(auth)
-    }).bind(
-        format!("{}:{}", context.host, context.port)
-    )?.run().await
+            .service(login_monzo)
+    }).bind(url)?.run().await
 }
